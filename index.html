@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>m6-01a</title>
+    <style>
+        /* 共通のCSSスタイル */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+        .post-container {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .odd-post {
+            background-color: #f2f2f2;
+        }
+        .even-post {
+            background-color: #e0e0e0;
+        }
+        /* 共通のボタンスタイル */
+        input[type="text"],
+        textarea,
+        input[type="password"],
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        input[type="submit"] {
+            background-color: lightblue;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        input[type="submit"]:hover {
+            background-color: #007BFF;
+        }
+        .post-info {
+            font-size: 12px;
+            color: #888;
+        }
+        /* レスポンシブなスタイル */
+        @media screen and (max-width: 768px) {
+            .container {
+                max-width: 90%;
+                padding: 10px;
+            }
+            input[type="text"],
+            textarea,
+            input[type="password"],
+            input[type="submit"] {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <?php
+    // MySQL接続設定
+    $dsn = 'mysql:dbname=tb250317db;host=localhost';
+    $user = 'tb-250317';
+    $password = 'uuP7nhpGna';
+
+    try {
+        $pdo = new PDO($dsn, $user, $password, array(PDO::ATTR_ERRMODE => PDO::ERRMODE_WARNING));
+    } catch (PDOException $e) {
+        die('接続エラー:' . $e->getMessage());
+    }
+
+    // テーブルの作成（初回のみ必要）
+    $sql = "CREATE TABLE IF NOT EXISTS posts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255),
+        comment TEXT,
+        post_date DATETIME,
+        password VARCHAR(255)
+    )";
+    $pdo->exec($sql);
+
+    $newname = '';
+    $newcoment = '';
+    $editNumber = '';
+
+    if ($_SERVER["REQUEST_METHOD"] === "POST") {
+        $post_password = $_POST["post_password"];
+        $delete_password = $_POST["delete_password"];
+        $edit_password = $_POST["edit_password"];
+
+        if (isset($_POST["delete"])) {
+            $delete = intval($_POST["delete"]);
+            $sql = "SELECT * FROM posts WHERE id = ? AND password = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$delete, $delete_password]);
+            $row = $stmt->fetch();
+
+            if ($row) {
+                $sql = "DELETE FROM posts WHERE id = ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$delete]);
+            }
+        }
+
+        if (isset($_POST["edit"])) {
+            $edit = intval($_POST["edit"]);
+            $sql = "SELECT * FROM posts WHERE id = ? AND password = ?";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute([$edit, $edit_password]);
+            $row = $stmt->fetch();
+
+            if ($row) {
+                $editNumber = $edit;
+                $newname = $row['name'];
+                $newcoment = $row['comment'];
+            }
+        }
+
+        if (isset($_POST["name"]) && !empty($_POST["name"]) && isset($_POST["comment"]) && !empty($_POST["comment"])) {
+            $name = $_POST["name"];
+            $comment = $_POST["comment"];
+            $postDate = date("Y-m-d H:i:s");
+
+            if (!empty($_POST['edit_n'])) {
+                $edit = intval($_POST['edit_n']);
+                $password = $_POST["post_password"];
+
+                $sql = "UPDATE posts SET name = ?, comment = ?, post_date = ?, password = ? WHERE id = ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$name, $comment, $postDate, $password, $edit]);
+            } else {
+                $password = $_POST["post_password"];
+                $sql = "INSERT INTO posts (name, comment, post_date, password) VALUES (?, ?, ?, ?)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([$name, $comment, $postDate, $password]);
+            }
+
+            $editNumber = '';
+            $newname = '';
+            $newcoment = '';
+        }
+    }
+    ?>
+
+    <form method="POST" action="">
+        <input type="text" name="name" id="name" placeholder="名前" value="<?php echo $newname; ?>"><br>
+        <textarea type="text" name="comment" id="comment" placeholder="コメント" value="<?php echo $newcoment; ?>"></textarea><br>
+        <input type="password" name="post_password" id="post_password" placeholder="投稿パスワード"><br>
+        <input type="submit" name="post_submit" id="post_submit" value="投稿"><br>
+        <input type="text" name="delete" id="delete" placeholder="削除番号">
+        <input type="password" name="delete_password" id="delete_password" placeholder="削除パスワード"><br>
+        <input type="submit" name="delete_submit" id="delete_submit" value="削除"><br>
+        <input type="text" name="edit" id="edit" placeholder="編集">
+        <input type="password" name="edit_password" id="edit_password" placeholder="編集パスワード"><br>
+        <input type="submit" name="edit_submit" id="edit_submit" value="編集"><br>
+        <input type="hidden" name="edit_n" id="edit_n" value="<?php echo $editNumber; ?>">
+    </form>
+
+    <!-- 投稿を表示する -->
+    <div id="postList">
+        <?php
+        $sql = "SELECT * FROM posts";
+        $stmt = $pdo->query($sql);
+
+        foreach ($stmt as $row) {
+            echo '<div class="post-container">';
+            echo '<span class="post-info">' . $row['post_date'] . '</span><br>';
+            echo '<strong>' . $row['name'] . ':</strong> ' . $row['comment'] . '<br>';
+            echo '</div>';
+        }
+        ?>
+    </div>
+
+    <script>
+        // ページを読み込んだら投稿を取得して表示する
+        window.onload = function () {
+            getPosts();
+        };
+
+        // 新しい投稿を追加する
+        function addPost(name, comment, postDate) {
+            const postList = document.getElementById('postList');
+            const postContainer = document.createElement('div');
+            postContainer.className = 'post-container';
+            postContainer.innerHTML = '<span class="post-info">' + postDate + '</span><br><strong>' + name + ':</strong> ' + comment + '<br>';
+            postList.appendChild(postContainer);
+        }
+
+        // 投稿を取得して表示する
+        function getPosts() {
+            fetch('get_posts.php') // 投稿を取得するPHPスクリプトのパスを指定
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(post => {
+                        addPost(post.name, post.comment, post.post_date);
+                    });
+                });
+        }
+    </script>
+</body>
+</html>
